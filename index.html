@@ -3,35 +3,53 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>แบบทดสอบวิชา Arduino พื้นฐาน (60 ข้อ 30 คะแนน)</title>
+  <title>ระบบสอบออนไลน์ - วิชา Arduino พื้นฐาน (60 ข้อ)</title>
   <!-- Bootstrap 5 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- SheetJS สำหรับ Export Excel -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  
+  <!-- SheetJS สำหรับสร้างไฟล์ Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Firebase SDK (เวอร์ชัน 8) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
   <style>
-    body { background-color: #f8f9fa; font-family: 'Sarabun', sans-serif; }
-    .card { border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.08); }
-    .hidden { display: none !important; }
-    .timer-badge { font-size: 1.2rem; font-weight: bold; }
-    .question-card { background-color: #ffffff; border-left: 5px solid #0d6efd; }
-    .form-check-label { cursor: pointer; }
+    body {
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      background-color: #f8f9fa;
+    }
+    .quiz-container {
+      max-width: 850px;
+      margin: 30px auto;
+    }
+    .sticky-timer {
+      position: sticky;
+      top: 10px;
+      z-index: 1000;
+    }
+    .warning-badge {
+      font-size: 1.1rem;
+    }
   </style>
 </head>
-<body>
+<body oncontextmenu="return false;" oncopy="return false;" oncut="return false;" onpaste="return false;">
 
-<div class="container py-4">
-
-  <!-- ================= หน้า 1: ลงทะเบียนเข้าสอบ ================= -->
-  <div id="section-register" class="row justify-content-center">
-    <div class="col-md-8">
-      <div class="card p-4">
-        <h3 class="text-center mb-3">แบบทดสอบวิชา Arduino พื้นฐาน (60 ข้อ 30 คะแนน)</h3>
-        
-        <div class="alert alert-warning">
+  <div class="container quiz-container">
+    
+    <!-- 1. หน้าแรก: ฟอร์มกรอกข้อมูลนักเรียน และ ปุ่มเข้าสู่ระบบ Admin -->
+    <div id="start-card" class="card shadow-sm mb-4">
+      <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <h3 class="mb-0 fs-4">แบบทดสอบวิชา Arduino พื้นฐาน (60 ข้อ 30 คะแนน)</h3>
+        <button class="btn btn-outline-light btn-sm" onclick="showAdminModal()">Admin Login</button>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-warning" role="alert">
           <h5>กฎและข้อบังคับในการสอบ</h5>
           <ul>
-            <li>ข้อสอบมีทั้งหมด <strong>60 ข้อ (30 คะแนน)</strong></li>
+            <li>ข้อสอบมีทั้งหมด <strong>60 ข้อ (30 คะแนน)</strong> (ระบบสุ่มลำดับข้อสอบ)</li>
             <li>มีเวลาในการทำข้อสอบทั้งหมด <strong>60 นาที</strong></li>
             <li><strong>ห้ามสลับหน้าจอ / แท็บเบราว์เซอร์:</strong> หากตรวจพบเกิน 3 ครั้ง ระบบจะส่งข้อสอบทันที</li>
             <li><strong>ห้ามคัดลอกข้อความ หรือคลิกขวา</strong> บนหน้าเว็บ</li>
@@ -39,433 +57,500 @@
           </ul>
         </div>
 
-        <form id="form-login" onsubmit="event.preventDefault(); startExam();">
-          <div class="mb-3">
-            <label class="form-label">ชื่อ-นามสกุล</label>
-            <input type="text" id="studentName" class="form-control" required placeholder="ด.ช. สมชาย ใจดี">
-          </div>
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <label class="form-label">ชั้น</label>
-              <input type="text" id="studentClass" class="form-control" required placeholder="ม.3/1">
+        <form id="student-form">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="student-name" class="form-label fw-bold">ชื่อ - นามสกุล</label>
+              <input type="text" class="form-control" id="student-name" required placeholder="ด.ช. สมชาย ใจดี">
             </div>
-            <div class="col-md-4">
-              <label class="form-label">เลขที่</label>
-              <input type="number" id="studentNo" class="form-control" required placeholder="1">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">โรงเรียน</label>
-              <input type="text" id="studentSchool" class="form-control" required placeholder="ชื่อโรงเรียน">
+            <div class="col-md-6 mb-3">
+              <label for="student-class" class="form-label fw-bold">ระดับชั้น</label>
+              <input type="text" class="form-control" id="student-class" required placeholder="ม.3/1">
             </div>
           </div>
-          <button type="submit" class="btn btn-primary w-100 py-2 fs-5">เริ่มทำข้อสอบ</button>
-        </form>
-
-        <div class="text-end mt-4">
-          <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#adminLoginModal">เข้าสู่ระบบผู้ดูแล (Admin)</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ================= หน้า 2: หน้าทำข้อสอบ ================= -->
-  <div id="section-quiz" class="hidden">
-    <div class="card p-3 mb-4 sticky-top bg-white shadow-sm">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <span class="badge bg-danger timer-badge">เวลาคงเหลือ: <span id="timer">60:00</span></span>
-        </div>
-        <div>
-          <span class="badge bg-warning text-dark fs-6">สลับหน้าจอ: <span id="switch-count">0</span> / 3 ครั้ง</span>
-        </div>
-      </div>
-    </div>
-
-    <form id="quiz-form">
-      <div id="questions-container"></div>
-      <div class="text-center my-4">
-        <button type="button" class="btn btn-success btn-lg px-5 shadow" onclick="submitExam(false)">ส่งข้อสอบ</button>
-      </div>
-    </form>
-  </div>
-
-  <!-- ================= หน้า 3: แจ้งส่งข้อสอบสำเร็จ & เด้งกลับหน้าแรก ================= -->
-  <div id="section-submitted" class="hidden text-center py-5">
-    <div class="card p-5">
-      <h2 class="text-success mb-3">บันทึกคำตอบเรียบร้อยแล้ว!</h2>
-      <p class="fs-5">ระบบได้ทำการส่งคำตอบและบันทึกข้อมูลการสอบของคุณเข้าสู่ฐานข้อมูลแล้ว</p>
-      
-      <div class="alert alert-info d-inline-block my-3 fs-5">
-        ระบบกำลังพาคุณกลับสู่หน้าแรกใน <span id="redirect-timer" class="fw-bold text-danger">5</span> วินาที...
-      </div>
-      
-      <div class="mt-2">
-        <button class="btn btn-primary px-4" onclick="location.reload()">กลับสู่หน้าแรกทันที</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ================= หน้า 4: Admin Panel (จัดการข้อมูล/ลบ/ดาวน์โหลด) ================= -->
-  <div id="section-admin" class="hidden">
-    <div class="card p-4">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4>แผงควบคุมผู้ดูแลระบบ (Admin Panel)</h4>
-        <div>
-          <button class="btn btn-success me-2" onclick="exportToExcel()">ดาวน์โหลด Excel</button>
-          <button class="btn btn-secondary" onclick="location.reload()">ออกจากระบบ</button>
-        </div>
-      </div>
-
-      <div class="table-responsive">
-        <table class="table table-bordered table-hover align-middle" id="adminTable">
-          <thead class="table-light">
-            <tr>
-              <th>เวลาที่ส่ง</th>
-              <th>ชื่อ-นามสกุล</th>
-              <th>ชั้น</th>
-              <th>เลขที่</th>
-              <th>โรงเรียน</th>
-              <th>ตอบถูก (ข้อ)</th>
-              <th>คะแนนรวม (30)</th>
-              <th>สลับหน้าจอ (ครั้ง)</th>
-              <th class="text-center">จัดการ</th>
-            </tr>
-          </thead>
-          <tbody id="adminTableBody">
-            <!-- ข้อมูลดึงจาก Firebase -->
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<!-- Modal สำหรับล็อกอิน Admin -->
-<div class="modal fade" id="adminLoginModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">เข้าสู่ระบบผู้ดูแล (Admin Login)</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <form onsubmit="event.preventDefault(); handleAdminLogin();">
-          <div class="mb-3">
-            <label class="form-label">Username</label>
-            <input type="text" id="adminUser" class="form-control" required placeholder="กรอก Username">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="student-id" class="form-label fw-bold">เลขที่</label>
+              <input type="text" class="form-control" id="student-id" required placeholder="01">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="student-school" class="form-label fw-bold">โรงเรียน</label>
+              <input type="text" class="form-control" id="student-school" required placeholder="ชื่อโรงเรียน">
+            </div>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Password</label>
-            <input type="password" id="adminPass" class="form-control" required placeholder="กรอก Password">
-          </div>
-          <button type="submit" class="btn btn-primary w-100">เข้าสู่ระบบ</button>
+          <button type="submit" class="btn btn-success w-100 btn-lg mt-2">เริ่มทำข้อสอบ</button>
         </form>
       </div>
     </div>
+
+    <!-- 2. หน้าทำข้อสอบ -->
+    <div id="quiz-section" class="d-none">
+      <div class="card shadow-sm mb-4 sticky-timer border-danger">
+        <div class="card-body d-flex justify-content-between align-items-center py-2">
+          <div>
+            <span class="text-muted">เวลาคงเหลือ:</span>
+            <span id="timer-display" class="fw-bold text-danger fs-4 ms-2">60:00</span>
+          </div>
+          <div>
+            <span class="badge bg-warning text-dark warning-badge">
+              สลับหน้าจอ: <span id="warning-count">0</span> / 3 ครั้ง
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <form id="quiz-form">
+        <div id="questions-container"></div>
+        <div class="d-grid gap-2 my-4">
+          <button type="button" class="btn btn-primary btn-lg" id="btn-submit-quiz">ส่งข้อสอบ</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- 3. หน้าสรุปเมื่อส่งข้อสอบเรียบร้อย & กลับหน้าแรกอัตโนมัติ -->
+    <div id="result-card" class="card shadow-sm mb-4 d-none text-center">
+      <div class="card-body py-5">
+        <h2 class="text-success mb-3">บันทึกคำตอบเรียบร้อยแล้ว!</h2>
+        <p class="fs-5 text-muted">ระบบได้ทำการส่งคำตอบและบันทึกข้อมูลการสอบของคุณเข้าสู่ฐานข้อมูลแล้ว</p>
+        
+        <div class="alert alert-info d-inline-block px-4 py-3 my-3">
+          ระบบกำลังนำคุณกลับสู่หน้าแรกใน <span id="redirect-counter" class="fw-bold text-danger fs-4">5</span> วินาที...
+        </div>
+
+        <div class="mt-3">
+          <button class="btn btn-primary btn-lg px-4" onclick="location.reload()">กลับสู่หน้าแรกทันที</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. หน้า Admin Panel -->
+    <div id="admin-section" class="card shadow-sm mb-4 d-none">
+      <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">แผงควบคุมผู้ดูแลระบบ (Admin Panel)</h4>
+        <button class="btn btn-outline-light btn-sm" onclick="logoutAdmin()">ออกจากระบบ</button>
+      </div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">รายการสรุปคะแนนสอบของนักเรียน (Firebase Realtime)</h5>
+          <button class="btn btn-success" onclick="exportToExcel()">
+            ดาวน์โหลดเป็นไฟล์ Excel (.xlsx)
+          </button>
+        </div>
+        
+        <div class="table-responsive">
+          <table class="table table-bordered table-striped align-middle text-center">
+            <thead class="table-dark">
+              <tr>
+                <th>เวลาที่ส่ง</th>
+                <th>ชื่อ-นามสกุล</th>
+                <th>ชั้น</th>
+                <th>เลขที่</th>
+                <th>โรงเรียน</th>
+                <th>ตอบถูก (ข้อ)</th>
+                <th>คะแนนรวม (30 คะแนน)</th>
+                <th>สลับหน้าจอ (ครั้ง)</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="admin-table-body">
+              <!-- ข้อมูลการสอบจาก Firebase จะแสดงที่นี่ -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </div>
-</div>
 
-<!-- Bootstrap 5 JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Modal เข้าสู่ระบบ Admin -->
+  <div class="modal fade" id="adminModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white">
+          <h5 class="modal-title">เข้าสู่ระบบผู้ดูแล (Admin Login)</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="admin-login-form">
+            <div class="mb-3">
+              <label class="form-label">Username</label>
+              <input type="text" id="admin-user" class="form-control" required placeholder="กรอก Username">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Password</label>
+              <input type="password" id="admin-pass" class="form-control" required placeholder="กรอก Password">
+            </div>
+            <button type="submit" class="btn btn-dark w-100">เข้าสู่ระบบ</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
 
-<!-- Firebase SDK (v8 Compat) -->
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <!-- Bootstrap 5 JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-<script>
-  // ================= 1. คลังข้อสอบ 60 ข้อ =================
-  const examQuestions = [
-    { q: "1. Arduino คืออะไร?", options: ["บอร์ดไมโครคอนโทรลเลอร์แบบ Open-source", "โปรแกรมแต่งรูปภาพ", "ระบบปฏิบัติการคอมพิวเตอร์", "ภาษาคอมพิวเตอร์ชนิดหนึ่ง"], ans: "A" },
-    { q: "2. บอร์ด Arduino Uno R3 ใช้ไมโครคอนโทรลเลอร์เบอร์ใดเป็นหลัก?", options: ["ATmega328P", "ESP32", "PIC16F84", "STM32"], ans: "A" },
-    { q: "3. แรงดันไฟฟ้าหลักที่ใช้จ่ายเลี้ยงบอร์ด Arduino ผ่านช่อง USB คือกี่โวลต์?", options: ["3.3V", "5V", "9V", "12V"], ans: "B" },
-    { q: "4. พอร์ต Digital ขาใดของ Arduino Uno ที่สามารถส่งสัญญาณ PWM (Pulse Width Modulation) ได้?", options: ["ขา 0, 1, 2", "ขา 3, 5, 6, 9, 10, 11", "ขา 4, 7, 8", "ขา A0, A1, A2"], ans: "B" },
-    { q: "5. พิน Analog Read ของ Arduino Uno R3 มีทั้งหมดกี่ขา?", options: ["4 ขา", "6 ขา (A0-A5)", "8 ขา", "10 ขา"], ans: "B" },
-    { q: "6. ฟังก์ชันใดในโปรแกรม Arduino ที่ทำงานเพียงครั้งเดียวเมื่อเริ่มเปิดเครื่อง?", options: ["loop()", "setup()", "main()", "init()"], ans: "B" },
-    { q: "7. ฟังก์ชันใดที่ทำงานวนซ้ำต่อเนื่องตลอดเวลาตราบใดที่ยังมีกระแสไฟฟ้าจ่ายให้บอร์ด?", options: ["setup()", "loop()", "start()", "run()"], ans: "B" },
-    { q: "8. คำสั่งใดใช้สำหรับกำหนดหน้าที่ของขาพอร์ต Digital ว่าเป็น INPUT หรือ OUTPUT?", options: ["digitalWrite()", "digitalRead()", "pinMode()", "analogWrite()"], ans: "C" },
-    { q: "9. คำสั่ง digitalWrite(13, HIGH); หมายถึงข้อใด?", options: ["อ่านค่าไฟฟ้าจากขา 13", "จ่ายไฟแรงดันสูง (5V) ออกทางขา 13", "ตัดการจ่ายไฟ (0V) ออกจากขา 13", "กำหนดขา 13 ให้เป็นขาอินพุต"], ans: "B" },
-    { q: "10. หากต้องการให้โปรแกรมหยุดรอเป็นเวลา 1 วินาที ต้องใช้คำสั่งใด?", options: ["delay(1);", "delay(10);", "delay(100);", "delay(1000);"], ans: "D" },
-    { q: "11. สัญลักษณ์สแลชสองตัว // ในภาษา C/C++ ของ Arduino ใช้ทำอะไร?", options: ["หารเลข", "คอมเมนต์ข้อความบรรทัดเดียว", "เพิ่มค่าทีละ 1", "ขึ้นบรรทัดใหม่"], ans: "B" },
-    { q: "12. อุปกรณ์ใดทำหน้าที่แปลงสัญญาณแสงเป็นค่าทางไฟฟ้า?", options: ["LED", "LDR (Photoresistor)", "Buzzer", "Relay"], ans: "B" },
-    { q: "13. การต่อหลอด LED เข้ากับขา Arduino ควรต่ออุปกรณ์ใดอนุกรมร่วมด้วยเพื่อป้องกันหลอดขาด?", options: ["ตัวเก็บประจุ (Capacitor)", "ตัวต้านทาน (Resistor)", "ไดโอด (Diode)", "ทรานซิสเตอร์ (Transistor)"], ans: "B" },
-    { q: "14. ค่าที่อ่านได้จากฟังก์ชัน analogRead() บน Arduino Uno จะอยู่ในช่วงเท่าใด?", options: ["0 ถึง 1", "0 ถึง 255", "0 ถึง 1023", "0 ถึง 4095"], ans: "C" },
-    { q: "15. ค่าที่ส่งออกด้วยฟังก์ชัน analogWrite() (สัญญาณ PWM) อยู่ในช่วงเท่าใด?", options: ["0 ถึง 1023", "0 ถึง 255", "0 ถึง 100", "-128 ถึง 127"], ans: "B" },
-    { q: "16. บอร์ด Arduino Uno มีความละเอียดของ ADC (Analog to Digital Converter) กี่บิต?", options: ["8 บิต", "10 บิต", "12 บิต", "16 บิต"], ans: "B" },
-    { q: "17. เซนเซอร์ DHT11 นิยมใช้สำหรับวัดค่าอะไร?", options: ["ความดันอากาศและแสง", "ระยะทาง", "อุณหภูมิและความชื้นสัมพัทธ์", "ความเร็วรอบมอเตอร์"], ans: "C" },
-    { q: "18. อุปกรณ์ Ultrasonic Sensor (เช่น HC-SR04) นิยมใช้ทำอะไร?", options: ["วัดอุณหภูมิ", "วัดระยะทางสะท้อนคลื่นเสียง", "ตรวจจับแก๊ส", "วัดระดับความสว่าง"], ans: "B" },
-    { q: "19. ขา Trig ของ HC-SR04 ทำหน้าที่อะไร?", options: ["รับคลื่นเสียงสะท้อนกลับ", "ส่งคลื่นเสียงความถี่สูงออกไป", "จ่ายไฟเลี้ยงเซนเซอร์", "ต่อลงกราวด์"], ans: "B" },
-    { q: "20. ขา Echo ของ HC-SR04 ทำหน้าที่อะไร?", options: ["ส่งคลื่นเสียง", "รับคลื่นเสียงที่สะท้อนกลับมา", "ควบคุมความเร็วสัญญาณ", "เป็นพินรีเซ็ต"], ans: "B" },
-    { q: "21. โมดูล Relay ทำหน้าที่อย่างไรในวงจรอิเล็กทรอนิกส์?", options: ["เพิ่มความเร็วประมวลผล", "สวิตช์ตัดต่อวงจรไฟฟ้าแรงสูงโดยใช้กระแสต่ำควบคุม", "ขยายสัญญาณเสียง", "แปลงไฟ AC เป็น DC"], ans: "B" },
-    { q: "22. เซนเซอร์ PIR Motion Sensor นิยมใช้ตรวจจับสิ่งใด?", options: ["การเคลื่อนไหวของรังสีอินฟราเรดจากสิ่งมีชีวิต", "ระดับความเข้มแสง", "เสียงปบมือ", "ความชื้นในดิน"], ans: "A" },
-    { q: "23. การสื่อสารแบบ Serial บน Arduino Uno ใช้ขาใดในการรับข้อมูล (RX) และส่งข้อมูล (TX)?", options: ["ขา 0 (RX) และ ขา 1 (TX)", "ขา 2 (RX) และ ขา 3 (TX)", "ขา A4 (RX) และ ขา A5 (TX)", "ขา 12 (RX) และ ขา 13 (TX)"], ans: "A" },
-    { q: "24. คำสั่งใดใช้เปิดการสื่อสาร Serial ที่ Baud rate 9600?", options: ["Serial.open(9600);", "Serial.begin(9600);", "Serial.start(9600);", "Serial.connect(9600);"], ans: "B" },
-    { q: "25. คำสั่งใดใช้พิมพ์ข้อความออกทาง Serial Monitor พร้อมขึ้นบรรทัดใหม่?", options: ["Serial.print();", "Serial.println();", "Serial.write();", "Serial.send();"], ans: "B" },
-    { q: "26. เซนเซอร์ Servo Motor แตกต่างจากมอเตอร์กระแสตรง (DC Motor) อย่างไร?", options: ["สามารถหมุนและควบคุมองศาได้อย่างแม่นยำ", "หมุนได้เร็วกว่ามาก", "ใชักระแสไฟน้อยกว่า 10 เท่า", "ไม่ต้องใช้ไฟเลี้ยง"], ans: "A" },
-    { q: "27. การใช้งาน Servo Motor ใน Arduino ต้องเรียกใช้ไลบรารีใด?", options: ["#include &lt;EEPROM.h&gt;", "#include &lt;Servo.h&gt;", "#include &lt;Wire.h&gt;", "#include &lt;SPI.h&gt;"], ans: "B" },
-    { q: "28. คำสั่ง myservo.write(90); หมายถึงอะไร?", options: ["หมุนมอเตอร์ด้วยความเร็ว 90 RPM", "สั่งให้ Servo หมุนไปที่ตำแหน่ง 90 องศา", "จ่ายไฟ 90% ให้มอเตอร์", "ตั้งค่าพินเป็นขา 90"], ans: "B" },
-    { q: "29. ชนิดข้อมูล int (integer) ในภาษา C ของ Arduino Uno ใช้พื้นที่เก็บข้อมูลกี่บิต (และมีค่าประมาณเท่าใด)?", options: ["8 บิต (0 ถึง 255)", "16 บิต (-32,768 ถึง 32,767)", "32 บิต", "64 บิต"], ans: "B" },
-    { q: "30. ชนิดข้อมูล float ใช้สำหรับเก็บข้อมูลประเภทใด?", options: ["ข้อความยาวๆ", "ตัวเลขทศนิยม", "ตัวอักษรตัวเดียว", "ค่าความจริง True/False"], ans: "B" },
-    { q: "31. ชนิดข้อมูล bool (boolean) สามารถเก็บค่าอะไรได้บ้าง?", options: ["ตัวเลขทศนิยม", "true หรือ false (1 หรือ 0)", "ตัวอักษร A-Z", "ข้อความทวิพากษ์"], ans: "B" },
-    { q: "32. ตัวดำเนินการชนิดใดใช้สำหรับการเปรียบเทียบว่า 'เท่ากับ' หรือไม่?", options: ["=", "==", "===", "!="], ans: "B" },
-    { q: "33. สัญลักษณ์ != ในเงื่อนไข หมายถึงอะไร?", options: ["เท่ากับ", "ไม่เท่ากับ", "มากกว่าหรือเท่ากับ", "น้อยกว่าหรือเท่ากับ"], ans: "B" },
-    { q: "34. โครงสร้างคำสั่งควบคุมแบบใดใช้สำหรับการตัดสินใจเลือกทำเงื่อนไข?", options: ["for", "while", "if - else", "switch case เท่านั้น"], ans: "C" },
-    { q: "35. การเชื่อมต่อจอ LCD แบบ I2C ช่วยลดจำนวนสายสัญญาณที่ต้องต่อกับ Arduino เหลือเพียงกี่สาย (ไม่นับสายไฟเลี้ยง VCC/GND)?", options: ["2 สาย (SDA, SCL)", "4 สาย", "6 สาย", "8 สาย"], ans: "A" },
-    { q: "36. ขา SDA และ SCL บน Arduino Uno สำหรับการสื่อสารแบบ I2C ตรงกับพินใด?", options: ["พิน 2 และ 3", "พิน 10 และ 11", "พิน A4 (SDA) และ A5 (SCL)", "พิน 12 และ 13"], ans: "C" },
-    { q: "37. ไลบรารีมาตรฐานที่ใช้สำหรับการสื่อสารผ่านโปรโตคอล I2C ใน Arduino คืออะไร?", options: ["#include &lt;SPI.h&gt;", "#include &lt;Wire.h&gt;", "#include &lt;SoftwareSerial.h&gt;", "#include &lt;WiFi.h&gt;"], ans: "B" },
-    { q: "38. ปุ่มกด (Push Button) เมื่อยังไม่กด สัญญาณอาจลอยล่อง (Floating) การแก้ปัญหาสามารถตั้งค่า pinMode อย่างไร?", options: ["pinMode(pin, INPUT);", "pinMode(pin, INPUT_PULLUP);", "pinMode(pin, OUTPUT);", "pinMode(pin, ANALOG);"], ans: "B" },
-    { q: "39. การใช้ INPUT_PULLUP จะทำให้สถานะปกติเมื่อยังไม่กดปุ่มเป็นค่าใด?", options: ["LOW (0)", "HIGH (1)", "5V", "สุ่มค่า"], ans: "B" },
-    { q: "40. Buzzer ชนิด Active และ Passive ต่างกันอย่างไร?", options: ["Active เกิดเสียงได้เองเมื่อจ่ายไฟ DC / Passive ต้องจ่ายสัญญาณความถี่ pulse", "Active ใช้ไฟ AC เท่านั้น", "Passive ดังกว่า Active", "ไม่ต่างกัน"], ans: "A" },
-    { q: "41. ฟังก์ชัน tone(pin, frequency); ใช้สำหรับทำอะไร?", options: ["ปรับความสว่าง LED", "สร้างสัญญาณความถี่เสียงออกลำโพง/Buzzer", "หมุน Servo Motor", "ส่งข้อมูล Serial"], ans: "B" },
-    { q: "42. คำสั่ง noTone(pin); มีหน้าที่อะไร?", options: ["ลดเสียงลงครึ่งหนึ่ง", "หยุดการสร้างสัญญาณเสียงบนขาที่กำหนด", "เปิดเสียงระดับสูงสุด", "เปลี่ยนความถี่เสียง"], ans: "B" },
-    { q: "43. บอร์ด ESP32 หรือ ESP8266 มีจุดเด่นต่างจาก Arduino Uno ทั่วไปอย่างไร?", options: ["ราคาถูกกว่า 100 เท่า", "มี Wi-Fi และ Bluetooth ในตัว", "ใช้ไฟ 220V ได้โดยตรง", "เขียนโปรแกรมไม่ได้"], ans: "B" },
-    { q: "44. สัญญาณชนิดใดที่เป็นสัญญาณแบบต่อเนื่อง (Continuous Signal)?", options: ["Digital Signal", "Analog Signal", "PWM Signal", "Binary Signal"], ans: "B" },
-    { q: "45. สัญญาณ Digital มีกี่สถานะ?", options: ["1 สถานะ", "2 สถานะ (HIGH และ LOW)", "1024 สถานะ", "ไม่จำกัดสถานะ"], ans: "B" },
-    { q: "46. ในบอร์ด Arduino Uno ขา Reset มีหน้าที่อะไร?", options: ["ลบโปรแกรมในบอร์ดทิ้งอย่างถาวร", "เริ่มต้นการทำงานของโปรแกรมใหม่ตั้งแต่ต้น", "ปิดการทำงานของบอร์ด", "สลับไปโหมดผู้พัฒนา"], ans: "B" },
-    { q: "47. อุปกรณ์ใดทำหน้าที่แปลงแรงดันไฟฟ้า AC 220V เป็น DC 5V เพื่อเลี้ยงวงจร?", options: ["Power Adapter / Switching Power Supply", "Transformer เปลือย", "Inverter", "Battery 9V"], ans: "A" },
-    { q: "48. พิน VIN บนบอร์ด Arduino Uno มีไว้สำหรับทำอะไร?", options: ["รับแรงดันไฟ DC ภายนอก (ประมาณ 7-12V) เพื่อจ่ายเข้าวงจรปรับแรงดันของบอร์ด", "ส่งไฟ 5V ออกไปนอกบอร์ด", "ต่อเข้ากับไฟ 220V", "ส่งสัญญาณ Analog"], ans: "A" },
-    { q: "49. คำสั่ง break; ในลูป for หรือ switch case มีหน้าที่อะไร?", options: ["ย้อนกลับไปจุดเริ่มต้น", "หยุดและออกจากลูปหรือเงื่อนไขทันที", "ข้ามไปรอบถัดไป", "หน่วงเวลา 1 วินาที"], ans: "B" },
-    { q: "50. คำสั่ง continue; ในลูปทำหน้าที่อย่างไร?", options: ["ออกจากลูปทันที", "ข้ามการทำงานส่วนที่เหลือในรอบปัจจุบันแล้วไปเริ่มรอบถัดไป", "เริ่มระบบใหม่", "แสดงผลข้อผิดพลาด"], ans: "B" },
-    { q: "51. เซนเซอร์วัดความชื้นในดิน (Soil Moisture Sensor) อาศัยหลักการใดในการวัด?", options: ["การวัดค่าความต้านทานหรือความจุไฟฟ้าในดิน", "การยิงแสงเลเซอร์", "การวัดอุณหภูมิดิน", "การวัดคลื่นเสียง"], ans: "A" },
-    { q: "52. หากต้องการรวมไฟล์ หรือไลบรารีภายนอกเข้ามาใช้งานในโค้ด ต้องใช้คำสั่งใดบนสุดของโปรแกรม?", options: ["#define", "#include", "#import", "using namespace"], ans: "B" },
-    { q: "53. คำสั่ง #define LED_PIN 13 มีผลอย่างไร?", options: ["สร้างตัวแปรชนิด int", "กำหนดค่าคงที่แทนที่ LED_PIN ด้วยเลข 13 ก่อนคอมไพล์", "ตั้งค่าพิน 13 เป็น Output", "ไม่มีผลใดๆ"], ans: "B" },
-    { q: "54. หากต้องการเขียนโปรแกรมแบบไม่บล็อกการทำงาน (Non-blocking delay) ควรใช้ฟังก์ชันใดแทน delay()?", options: ["millis()", "micros()", "timer()", "clock()"], ans: "A" },
-    { q: "55. ฟังก์ชัน millis() ให้ค่าผลลัพธ์เป็นอะไร?", options: ["เวลาปัจจุบันในหน่วยนาที", "เวลาเป็นมิลลิวินาทีนับตั้งแต่เริ่มเปิดบอร์ด Arduino", "เวลาเป็นวินาที", "นาฬิกาจริงของโลก"], ans: "B" },
-    { q: "56. ค่าที่ส่งคืนจากฟังก์ชัน millis() มีโอกาสล้น (Overflow) ทวนกลับเป็น 0 ประมาณกี่วัน?", options: ["1 วัน", "7 วัน", "ประมาณ 50 วัน", "ไม่มีวันล้น"], ans: "C" },
-    { q: "57. อุปกรณ์ไอซีขับมอเตอร์ยอดนิยมเช่น L298N นิยมใช้ควบคุมอุปกรณ์ใด?", options: ["DC Motor และ Stepper Motor", "LED และ Buzzer", "จอภาพ LCD", "เซนเซอร์วัดอุณหภูมิ"], ans: "A" },
-    { q: "58. สายไฟประเภท Dupont Wire ที่มีหัวเป็นเข็มทั้งสองด้านเรียกว่าอะไร?", options: ["Male to Male (ผู้-ผู้)", "Female to Female (เมีย-เมีย)", "Male to Female (ผู้-เมีย)", "USB Cable"], ans: "A" },
-    { q: "59. แผงต่อวงจรทดลองที่นิยมใช้ต่อวงจรโดยไม่ต้องบัดกรีเรียกว่าอะไร?", options: ["PCB Board", "Breadboard / Protoboard", "Motherboard", "Stripboard"], ans: "B" },
-    { q: "60. ก่อนจะอัปโหลดโค้ดลงบอร์ด Arduino ผ่าน Arduino IDE ต้องไปตั้งค่าอะไรในเมนู Tools ให้ถูกต้องก่อน?", options: ["Board และ Port", "Font และ Theme", "Language และ Region", "File และ Edit"], ans: "A" }
-  ];
-
-  // ================= 2. ตั้งค่า FIREBASE CONFIG =================
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
-  };
-
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
-
-  // ตัวแปรระบบ
-  let switchCount = 0;
-  let timerInterval = null;
-  let timeLeft = 60 * 60; // 60 นาที
-  let currentStudent = {};
-
-  // ================= 3. ป้องกันการคัดลอก/คลิกขวา/สลับหน้าจอ =================
-  document.addEventListener('contextmenu', e => e.preventDefault());
-  document.addEventListener('keydown', e => {
-    if (e.ctrlKey && (e.key === 'c' || e.key === 'v' || e.key === 'u' || e.key === 's')) e.preventDefault();
-  });
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && !document.getElementById('section-quiz').classList.contains('hidden')) {
-      switchCount++;
-      document.getElementById('switch-count').innerText = switchCount;
-      if (switchCount >= 3) {
-        alert("คุณสลับหน้าจอเกิน 3 ครั้ง ระบบจะส่งข้อสอบอัตโนมัติ!");
-        submitExam(true);
-      } else {
-        alert(`เตือนครั้งที่ ${switchCount}: ห้ามสลับหน้าจอ! (เกิน 3 ครั้งระบบจะส่งทันที)`);
-      }
-    }
-  });
-
-  // ================= 4. ระบบเริ่มทำข้อสอบ =================
-  function startExam() {
-    const name = document.getElementById('studentName').value.trim();
-    const studentClass = document.getElementById('studentClass').value.trim();
-    const no = document.getElementById('studentNo').value.trim();
-    const school = document.getElementById('studentSchool').value.trim();
-
-    if (!name || !studentClass || !no || !school) {
-      alert("กรุณากรอกข้อมูลให้ครบถ้วน");
-      return;
-    }
-
-    currentStudent = { name, studentClass, no, school };
-
-    document.getElementById('section-register').classList.add('hidden');
-    document.getElementById('section-quiz').classList.remove('hidden');
-    
-    renderQuestions();
-    startTimer();
-  }
-
-  function startTimer() {
-    timerInterval = setInterval(() => {
-      timeLeft--;
-      let m = Math.floor(timeLeft / 60);
-      let s = timeLeft % 60;
-      document.getElementById('timer').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
-
-      if (timeLeft <= 0) {
-        clearInterval(timerInterval);
-        alert("หมดเวลาทำข้อสอบ!");
-        submitExam(true);
-      }
-    }, 1000);
-  }
-
-  // ================= 5. เรนเดอร์ข้อสอบ 60 ข้อ =================
-  function renderQuestions() {
-    const container = document.getElementById('questions-container');
-    let html = '';
-
-    examQuestions.forEach((item, index) => {
-      const qNum = index + 1;
-      html += `
-        <div class="card p-4 mb-3 question-card">
-          <h5 class="mb-3 text-dark">${item.q}</h5>
-          <div class="form-check mb-2">
-            <input class="form-check-input" type="radio" name="q${qNum}" value="A" id="q${qNum}a">
-            <label class="form-check-label" for="q${qNum}a">ก. ${item.options[0]}</label>
-          </div>
-          <div class="form-check mb-2">
-            <input class="form-check-input" type="radio" name="q${qNum}" value="B" id="q${qNum}b">
-            <label class="form-check-label" for="q${qNum}b">ข. ${item.options[1]}</label>
-          </div>
-          <div class="form-check mb-2">
-            <input class="form-check-input" type="radio" name="q${qNum}" value="C" id="q${qNum}c">
-            <label class="form-check-label" for="q${qNum}c">ค. ${item.options[2]}</label>
-          </div>
-          <div class="form-check mb-2">
-            <input class="form-check-input" type="radio" name="q${qNum}" value="D" id="q${qNum}d">
-            <label class="form-check-label" for="q${qNum}d">ง. ${item.options[3]}</label>
-          </div>
-        </div>`;
-    });
-
-    container.innerHTML = html;
-  }
-
-  // ================= 6. ตรวจคำตอบ & บันทึกลง FIREBASE & นับถอยหลังกลับหน้าแรก =================
-  function submitExam(forceSubmit) {
-    if (!forceSubmit && !confirm("คุณต้องการส่งข้อสอบใช่หรือไม่?")) return;
-
-    clearInterval(timerInterval);
-
-    let correctCount = 0;
-
-    examQuestions.forEach((item, index) => {
-      const qNum = index + 1;
-      const selected = document.querySelector(`input[name="q${qNum}"]:checked`);
-      if (selected && selected.value === item.ans) {
-        correctCount++;
-      }
-    });
-
-    const totalScore = (correctCount / 2).toFixed(1); // 60 ข้อ = 30 คะแนน
-    const timestamp = new Date().toLocaleString('th-TH');
-
-    const dataPayload = {
-      fullname: currentStudent.name,
-      class: currentStudent.studentClass,
-      no: currentStudent.no,
-      school: currentStudent.school,
-      correctCount: correctCount,
-      totalScore: totalScore,
-      switchTabCount: switchCount,
-      timestamp: timestamp
+  <script>
+    // ----------------------------------------------------
+    // ตั้งค่าเชื่อมต่อ FIREBASE
+    // ----------------------------------------------------
+    const firebaseConfig = {
+      apiKey: "AIzaSyCJDuVQacbp3OVuxm218I4-1dFoMqaWdWI",
+      authDomain: "arduino-ex2.firebaseapp.com",
+      databaseURL: "https://arduino-ex2-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "arduino-ex2",
+      storageBucket: "arduino-ex2.firebasestorage.app",
+      messagingSenderId: "657079512355",
+      appId: "1:657079512355:web:fddd8ffda3b283186a7096",
+      measurementId: "G-3W34PYP51R"
     };
 
-    db.ref('exam_results').push(dataPayload, (error) => {
-      if (error) {
-        alert("เกิดข้อผิดพลาดในการส่งข้อมูล: " + error.message);
-      } else {
-        document.getElementById('section-quiz').classList.add('hidden');
-        document.getElementById('section-submitted').classList.remove('hidden');
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const database = firebase.database();
 
-        // ระบบนับถอยหลัง 5 วินาทีแล้วรีโหลดกลับหน้าโฮม
-        let redirectSec = 5;
-        const redirectElement = document.getElementById('redirect-timer');
+    // ----------------------------------------------------
+    // ข้อมูลระบบ และ ข้อมูลข้อสอบ 60 ข้อ
+    // ----------------------------------------------------
+    const ADMIN_USER = "admin1234";
+    const ADMIN_PASS = "23160";
+
+    const questionsData = [
+      { id: 1, title: "ไมโครคอนโทรลเลอร์หลักที่ใช้งานบนบอร์ด Arduino Uno R3 คือชิปรุ่นใด?", options: ["ก. ATmega328P", "ข. ATmega16U2", "ค. ESP32", "ง. STM32"], answer: "ก" },
+      { id: 2, title: "แรงดันไฟฟ้าที่จ่ายผ่านพอร์ต USB เข้าบอร์ด Arduino Uno R3 โดยปกติมีค่าเท่าใด?", options: ["ก. 3.3V", "ข. 5V", "ค. 9V", "ง. 12V"], answer: "ข" },
+      { id: 3, title: "ช่องจ่ายไฟแรงดันคงที่ 3.3V และ 5V บนบอร์ด Arduino อยู่ในกลุ่มพินใด?", options: ["ก. Digital Pins", "ข. Analog In Pins", "ค. Power Pins", "ง. ICSP Header"], answer: "ค" },
+      { id: 4, title: "พินดิจิทัล (Digital I/O Pins) บนบอร์ด Arduino Uno R3 มีจำนวนกี่พิน (ไม่รวมพินพิเศษ)?", options: ["ก. 6 พิน", "ข. 10 พิน", "ค. 14 พิน", "ง. 20 พิน"], answer: "ค" },
+      { id: 5, title: "พินอนาล็อกอินพุต (Analog In) บนบอร์ด Arduino Uno R3 มีพินอะไรบ้าง?", options: ["ก. D0 ถึง D5", "ข. A0 ถึง A5", "ค. P0 ถึง P5", "ง. IN0 ถึง IN5"], answer: "ข" },
+      { id: 6, title: "พินสัญญาณ PWM (Pulse Width Modulation) บนบอร์ด Arduino Uno R3 สังเกตได้จากสัญลักษณ์ใดหน้าหมายเลขพิน?", options: ["ก. สัญลักษณ์ #", "ข. สัญลักษณ์ ~", "ค. สัญลักษณ์ *", "ง. สัญลักษณ์ +"], answer: "ข" },
+      { id: 7, title: "พิน D0 และ D1 ของบอร์ด Arduino Uno R3 ทำหน้าที่พิเศษเกี่ยวกับอะไร?", options: ["ก. จ่ายไฟเลี้ยงกระแสสูง", "ข. สื่อสารข้อมูลอนุกรม (RX / TX)", "ค. รับค่าแรงดันอนาล็อก", "ง. เชื่อมต่อระบบ Wi-Fi"], answer: "ข" },
+      { id: 8, title: "หากต้องการจ่ายไฟเลี้ยงให้บอร์ด Arduino ผ่านช่อง DC Barrel Jack ควรใช้แรงดันไฟฟ้าในช่วงใดจึงจะปลอดภัยและเหมาะสมที่สุด?", options: ["ก. 3V - 5V", "ข. 7V - 12V", "ค. 15V - 24V", "ง. 220V"], answer: "ข" },
+      { id: 9, title: "ปุ่ม Reset บนบอร์ด Arduino Uno R3 มีหน้าที่อย่างไร?", options: ["ก. ลบโปรแกรมในบอร์ดทิ้งทั้งหมด", "ข. สั่งให้โปรแกรมเริ่มต้นทำงานใหม่ตั้งแต่บรรทัดแรก", "ค. ปิดการทำงานของบอร์ดชั่วคราว", "ง. สลับโหมดการทำงานเป็นรับค่าอนาล็อก"], answer: "ข" },
+      { id: 10, title: "พิน GND บนบอร์ด Arduino มีความสำคัญอย่างไร?", options: ["ก. เป็นพินสำหรับจ่ายไฟ 9V", "ข. เป็นพินกราวด์ (0V) สำหรับต่อให้ครบวงจร", "ค. เป็นพินส่งสัญญาณนาฬิกา", "ง. เป็นพินรับสัญญาณจากรีโมต"], answer: "ข" },
+      { id: 11, title: "ไฟ LED ที่สัญลักษณ์ 'L' บนบอร์ด Arduino Uno R3 เชื่อมต่ออยู่กับพินดิจิทัลใดโดยตรง?", options: ["ก. พิน 2", "ข. พิน 8", "ค. พิน 13", "ง. พิน A0"], answer: "ค" },
+      { id: 12, title: "ไฟ LED สถานะ 'ON' บนบอร์ด Arduino แสดงถึงอะไร?", options: ["ก. บอร์ดกำลังต่อเชื่อมอินเทอร์เน็ต", "ข. บอร์ดได้รับไฟเลี้ยงถูกต้อง", "ค. บอร์ดเกิดข้อผิดพลาดในการโหลดโค้ด", "ง. พินดิจิทัลกำลังส่งสัญญาณสูง (HIGH)"], answer: "ข" },
+      { id: 13, title: "คริสตัลออสซิลเลเตอร์ (Crystal Oscillator) บนบอร์ด Arduino Uno R3 ทำหน้าที่อะไร และมีความถี่เท่าใด?", options: ["ก. กำหนดจังหวะสัญญาณนาฬิกา ความถี่ 16 MHz", "ข. ปรับแรงดันไฟฟ้า ความถี่ 50 Hz", "ค. แปลงสัญญาณดิจิทัล ความถี่ 8 MHz", "ง. เก็บข้อมูลโปรแกรม ความถี่ 32 MHz"], answer: "ก" },
+      { id: 14, title: "ชิปตัวเล็กที่อยู่ใกล้พอร์ต USB (ATmega16U2) ทำหน้าที่อะไร?", options: ["ก. ประมวลผลเซนเซอร์อนาล็อก", "ข. แปลงสัญญาณ USB เป็น Serial เพื่อสื่อสารกับคอมพิวเตอร์", "ค. สำรองไฟเวลาดับ", "ง. ควบคุมไฟ LED แสดงผล"], answer: "ข" },
+      { id: 15, title: "ความละเอียดของการอ่านค่าอนาล็อก (ADC) บนบอร์ด Arduino Uno R3 มีค่ากี่บิต?", options: ["ก. 8 บิต (0-255)", "ข. 10 บิต (0-1023)", "ค. 12 บิต (0-4095)", "ง. 16 บิต (0-65535)"], answer: "ข" },
+      { id: 16, title: "หากต้องการใช้พิน AREF ต้องนำไปใช้ประโยชน์ในเรื่องใด?", options: ["ก. จ่ายไฟเลี้ยงอุปกรณ์ภายนอก", "ข. อ้างอิงแรงดันเปรียบเทียบสำหรับการอ่านค่าอนาล็อก", "ค. เพิ่มความเร็วในการประมวลผล", "ง. ต่อสายรีเซ็ตจากภายนอก"], answer: "ข" },
+      { id: 17, title: "พิน Vin บนกลุ่มพิน Power มีไว้ใช้งานอย่างไร?", options: ["ก. ต่อรับไฟเลี้ยงเข้าจากภายนอก หรือดึงไฟตามแรงดันที่จ่ายเข้า DC Jack ไปใช้", "ข. ต่อไฟออกจากบอร์ดขนาด 3.3V เท่านั้น", "ค. เป็นพินส่งสัญญาณดิจิทัลแรงดันสูง", "ง. ใช้เฉพาะต่อกับคอมพิวเตอร์"], answer: "ก" },
+      { id: 18, title: "พินดิจิทัลของ Arduino Uno R3 สามารถจ่ายกระแสไฟฟ้าต่อพินได้สูงสุดไม่เกินประมาณเท่าใด?", options: ["ก. 10 mA", "ข. 40 mA", "ค. 500 mA", "ง. 1 A"], answer: "ข" },
+      { id: 19, title: "ส่วนประกอบใดบนบอร์ดที่ทำหน้าที่ป้องกันไม่ให้แรงดันไฟฟ้าเกินส่งผลเสียต่อไมโครคอนโทรลเลอร์?", options: ["ก. USB Connector", "ข. Voltage Regulator (ตัวปรับแรงดันไฟ)", "ค. Reset Button", "ง. TX/RX LEDs"], answer: "ข" },
+      { id: 20, title: "บอร์ด Arduino Uno R3 ใช้แรงดันโลจิก (Logic Level) ทำงานที่กี่โวลต์?", options: ["ก. 1.8V", "ข. 3.3V", "ค. 5V", "ง. 12V"], answer: "ค" },
+
+      { id: 21, title: "ปุ่มที่มีสัญลักษณ์เครื่องหมายถูก (✓) บริเวณด้านซ้ายบนของ Arduino IDE มีไว้ทำหน้าที่อะไร?", options: ["ก. Upload โค้ดลงบอร์ด", "ข. Verify / Compile ตรวจสอบความถูกต้องของโค้ด", "ค. Open ไฟล์ใหม่", "ง. Save ไฟล์ปัจจุบัน"], answer: "ข" },
+      { id: 22, title: "ปุ่มที่มีสัญลักษณ์ลูกศรชี้ไปทางขวา (→) ใน Arduino IDE ทำหน้าที่อะไร?", options: ["ก. Upload โค้ดลงบอร์ด", "ข. Clear หน้าจอ", "ค. Serial Monitor", "ง. Auto Format จัดบรรทัด"], answer: "ก" },
+      { id: 23, title: "หากคอมพิวเตอร์มองไม่เห็นบอร์ด Arduino ขั้นตอนแรกที่ควรตรวจสอบใน Arduino IDE คือเมนูใด?", options: ["ก. File -> Examples", "ข. Tools -> Board และ Tools -> Port", "ค. Edit -> Cut", "ง. Sketch -> Include Library"], answer: "ข" },
+      { id: 24, title: "การนำเข้าไฟล์ Library ภายนอกที่เป็นไฟล์บีบอัด (.zip) ต้องเลือกผ่านเมนูใดใน Arduino IDE?", options: ["ก. Tools -> Manage Libraries", "ข. Sketch -> Include Library -> Add .ZIP Library...", "ค. File -> Preferences", "ง. Edit -> Insert Library"], answer: "ข" },
+      { id: 25, title: "การเรียกใช้งาน Library ในโค้ด Arduino ต้องใช้คำสั่งใดขึ้นต้นบรรทัด?", options: ["ก. #define", "ข. #include", "ค. import", "ง. using"], answer: "ข" },
+      { id: 26, title: "ฟังก์ชันใดในโปรแกรม Arduino ที่จะทำงานเพียง 'ครั้งเดียว' เมื่อบอร์ดเริ่มทำงานหรือกดปุ่ม Reset?", options: ["ก. void loop()", "ข. void setup()", "ค. void start()", "ง. void main()"], answer: "ข" },
+      { id: 27, title: "ฟังก์ชันใดในโปรแกรม Arduino ที่จะทำงาน 'วนซ้ำไปเรื่อยๆ' อย่างไม่สิ้นสุด?", options: ["ก. void setup()", "ข. void loop()", "ค. void run()", "ง. void restart()"], answer: "ข" },
+      { id: 28, title: "เครื่องหมายใดใช้สำหรับปิดท้ายคำสั่งสั่งการส่วนใหญ่ในภาษา C/C++ ของ Arduino?", options: ["ก. : (Colon)", "ข. ; (Semicolon)", "ค. , (Comma)", "ง. . (Dot)"], answer: "ข" },
+      { id: 29, title: "การเขียนคอมเมนต์ (Comment) บรรทัดเดียวใน Arduino IDE ต้องใช้สัญลักษณ์ใด?", options: ["ก. //", "ข. /*", "ค. #", "ง. --"], answer: "ก" },
+      { id: 30, title: "ชนิดตัวแปรใดเหมาะสำหรับเก็บค่าสถานะที่มีเพียง 2 ค่า คือ HIGH หรือ LOW (true หรือ false)?", options: ["ก. int", "ข. float", "ค. bool หรือ boolean", "ง. char"], answer: "ค" },
+      { id: 31, title: "คำสั่งใดใช้เริ่มต้นการสื่อสารอนุกรม (Serial Communication) ที่ความเร็ว 9600 bps?", options: ["ก. Serial.start(9600);", "ข. Serial.begin(9600);", "ค. Serial.open(9600);", "ง. Serial.connect(9600);"], answer: "ข" },
+      { id: 32, title: "ความต่างระหว่างคำสั่ง Serial.print(\"A\"); และ Serial.println(\"A\"); คืออะไร?", options: ["ก. println จะแสดงผลเป็นตัวพิมพ์ใหญ่เสมอ", "ข. println จะขึ้นบรรทัดใหม่หลังจากแสดงผลเสร็จ", "ค. print ส่งข้อมูลช้ากว่า println", "ง. print ใช้ได้กับตัวเลขเท่านั้น"], answer: "ข" },
+      { id: 33, title: "หากต้องการเปิดหน้าต่างดูข้อมูลที่ส่งมาจากบอร์ด Arduino ใน Arduino IDE ต้องใช้เครื่องมือใด?", options: ["ก. เครื่องมือ Serial Monitor (Ctrl + Shift + M)", "ข. เครื่องมือ Auto Format (Ctrl + T)", "ค. เครื่องมือ Serial Plotter (Ctrl + Shift + L)", "ง. เครื่องมือ Library Manager"], answer: "ก" },
+      { id: 34, title: "คำสั่งใดใช้กำหนดโหมดให้พินดิจิทัลทำหน้าที่เป็น 'พินรับสัญญาณอินพุต'?", options: ["ก. pinMode(pin, OUTPUT);", "ข. pinMode(pin, INPUT);", "ค. digitalMode(pin, IN);", "ง. setPin(pin, INPUT);"], answer: "ข" },
+      { id: 35, title: "โหมด INPUT_PULLUP ในคำสั่ง pinMode() มีความหมายอย่างไร?", options: ["ก. เปิดใช้งานตัวต้านทานดึงไฟขึ้นภายในชิป ไม่ต้องต่อตัวต้านทานภายนอก", "ข. เพิ่มกระแสไฟฟ้าให้พินรับค่าแรงดันได้สูงขึ้น", "ค. กลับค่าสัญญาณจากอนาล็อกเป็นดิจิทัล", "ง. สั่งให้พินนั้นจ่ายไฟ 5V ออกไปทันที"], answer: "ก" },
+      { id: 36, title: "คำสั่งใดใช้สำหรับอ่านค่าสัญญาณดิจิทัล (สถานะ HIGH หรือ LOW) จากพินที่กำหนด?", options: ["ก. digitalWrite(pin);", "ข. digitalRead(pin);", "ค. analogRead(pin);", "ง. readPin(pin);"], answer: "ข" },
+      { id: 37, title: "คำสั่ง analogRead(A0); จะคืนค่าผลลัพธ์เป็นตัวเลขอยู่ในช่วงใด?", options: ["ก. 0 ถึง 1", "ข. 0 ถึง 255", "ค. 0 ถึง 1023", "ง. 0 ถึง 4095"], answer: "ค" },
+      { id: 38, title: "คำสั่ง delay(2000); จะสั่งให้โปรแกรมหยุดรอเป็นเวลาเท่าใด?", options: ["ก. 0.2 วินาที", "ข. 2 วินาที", "ค. 20 วินาที", "ง. 200 วินาที"], answer: "ข" },
+      { id: 39, title: "ภาษาที่ใช้ในการเขียนโปรแกรม Arduino อ้างอิงมาจากภาษาคอมพิวเตอร์ใดเป็นหลัก?", options: ["ก. Python", "ข. C / C++", "ค. Java", "ง. Basic"], answer: "ข" },
+      { id: 40, title: "ข้อใดกล่าวถึงเรื่อง Case-sensitivity (ตัวพิมพ์เล็ก-ใหญ่) ในการเขียนโค้ด Arduino ได้ถูกต้อง?", options: ["ก. พิมพ์ตัวเล็กหรือตัวใหญ่มีความหมายเหมือนกันทุกประการ", "ข. ภาษา Arduino แยกแยะตัวพิมพ์เล็กและตัวพิมพ์ใหญ่ (เช่น pinMode ไม่เหมือนกับ Pinmode)", "ค. ตัวพิมพ์ใหญ่ใช้สำหรับชื่อตัวแปรเท่านั้น", "ง. ตัวพิมพ์เล็กใช้เฉพาะในฟังก์ชัน setup()"], answer: "ข" },
+
+      { id: 41, title: "คำสั่งใดใช้สั่งงานให้พินดิจิทัลจ่ายแรงดันไฟ 5V (สถานะ HIGH)?", options: ["ก. digitalWrite(pin, HIGH);", "ข. digitalRead(pin, HIGH);", "ค. analogWrite(pin, HIGH);", "ง. setOutput(pin, ON);"], answer: "ก" },
+      { id: 42, title: "หากต้องการดับไฟ LED ที่ต่ออยู่กับพิน 13 ต้องใช้คำสั่งใด?", options: ["ก. digitalWrite(13, LOW);", "ข. digitalWrite(13, OFF);", "ค. digitalWrite(13, 0V);", "ง. setPin(13, 0);"], answer: "ก" },
+      { id: 43, title: "คำสั่ง analogWrite(pin, value); ใช้สร้างสัญญาณชนิดใดเพื่อควบคุมความสว่าง LED หรือความเร็วมอเตอร์?", options: ["ก. AC Signal", "ข. PWM (Pulse Width Modulation)", "ค. I2C Signal", "ง. Serial Data"], answer: "ข" },
+      { id: 44, title: "ค่า value ที่กำหนดในคำสั่ง analogWrite(pin, value); ใส่ตัวเลขได้ช่วงใด?", options: ["ก. 0 ถึง 100", "ข. 0 ถึง 255", "ค. 0 ถึง 1023", "ง. 0 ถึง 65535"], answer: "ข" },
+      { id: 45, title: "พินใดต่อไปนี้บน Arduino Uno R3 สามารถใช้งานคำสั่ง analogWrite() ได้?", options: ["ก. พิน 2", "ข. พิน 6", "ค. พิน 7", "ง. พิน 8"], answer: "ข" },
+      { id: 46, title: "อุปกรณ์ใดต่อไปนี้ถือเป็นอุปกรณ์ประเภท Output (เอาต์พุต)?", options: ["ก. Push Button (สวิตช์กดติดปล่อยดับ)", "ข. LDR (ตัวต้านทานไวแสง)", "ค. Buzzer (ลำโพงบัซเซอร์)", "ง. Potentiometer (ตัวต้านทานปรับค่าได้)"], answer: "ค" },
+      { id: 47, title: "อุปกรณ์ใดต่อไปนี้ถือเป็นอุปกรณ์ประเภท Input (อินพุต)?", options: ["ก. LED", "ข. Relay", "ค. Servo Motor", "ง. Ultrasonic Sensor (ตัววัดระยะทาง)"], answer: "ง" },
+      { id: 48, title: "โครงสร้างคำสั่งควบคุมแบบมีเงื่อนไขในข้อใดใช้ในการตรวจสอบเพื่อตัดสินใจเลือกทำทางใดทางหนึ่ง?", options: ["ก. for(...)", "ข. if(...) ... else ...", "ค. while(...)", "ง. delay(...)"], answer: "ข" },
+      { id: 49, title: "เครื่องหมายเปรียบเทียบในข้อใดมีความหมายว่า 'เท่ากับ' ในการเขียนเงื่อนไข if?", options: ["ก. =", "ข. ==", "ค. :=", "ง. =>"], answer: "ข" },
+      { id: 50, title: "เครื่องหมายเปรียบเทียบในข้อใดมีความหมายว่า 'ไม่เท่ากับ'?", options: ["ก. !=", "ข. <>", "ค. =!", "ง. NOT="], answer: "ก" },
+      { id: 51, title: "หากต้องการสั่งให้ Buzzer ส่งเสียงความถี่ 1000 Hz ที่พิน 8 ต้องใช้คำสั่งใด?", options: ["ก. sound(8, 1000);", "ข. tone(8, 1000);", "ค. speaker(8, 1000);", "ง. analogWrite(8, 1000);"], answer: "ข" },
+      { id: 52, title: "คำสั่งที่ใช้หยุดการส่งเสียงของ Buzzer คือคำสั่งใด?", options: ["ก. noTone(pin);", "ข. stopSound(pin);", "ค. digitalWrite(pin, MUTE);", "ง. toneOff(pin);"], answer: "ก" },
+      { id: 53, title: "อุปกรณ์ 'Relay (รีเลย์)' มีประโยชน์หลักอย่างไรในงานสวิตช์อิเล็กทรอนิกส์?", options: ["ก. ปรับความสว่างไฟ LED", "ข. ใช้ควบคุมการเปิด-ปิดอุปกรณ์ไฟฟ้าแรงดันสูง/กระแสสูง (เช่น ไฟบ้าน 220V)", "ค. อ่านค่าอุณหภูมิ", "ง. แปลงสัญญาณอินพุตเป็นอนาล็อก"], answer: "ข" },
+      { id: 54, title: "การควบคุมมุมหมุนของ Servo Motor ผ่าน Library Servo.h ใช้คำสั่งใดสั่งให้หมุนไปที่มุมที่ต้องการ?", options: ["ก. myservo.spin(90);", "ข. myservo.write(90);", "ค. myservo.set(90);", "ง. myservo.angle(90);"], answer: "ข" },
+      { id: 55, title: "พิจารณาโค้ด: if (digitalRead(2) == HIGH) { digitalWrite(13, HIGH); } หมายถึงอะไร?", options: ["ก. ถ้าพิน 2 มีสถานะเป็น LOW ให้ไฟพิน 13 ติด", "ข. ถ้าอ่านค่าพิน 2 ได้สถานะ HIGH ให้จ่ายไฟออกพิน 13 (ติด)", "ค. สั่งให้พิน 2 และพิน 13 ติดพร้อมกัน", "ง. อ่านค่าพิน 13 แล้วส่งไปพิน 2"], answer: "ข" },
+      { id: 56, title: "หากนำค่าจาก analogRead(A0) (0-1023) มาเปลี่ยนเป็นช่วงค่าสำหรับ analogWrite() (0-255) ควรใช้คำสั่งใด?", options: ["ก. convert()", "ข. map()", "ค. scale()", "ง. transform()"], answer: "ข" },
+      { id: 57, title: "โครงสร้างคำสั่งวนซ้ำแบบใดที่เหมาะสำหรับการสั่งให้ไฟ LED กะพริบตามจำนวนรอบที่แน่นอน?", options: ["ก. for loop", "ข. if-else", "ค. switch-case", "ง. return"], answer: "ก" },
+      { id: 58, title: "สัญลักษณ์ตรรกศาสตร์ && ในเงื่อนไข if (A && B) มีความหมายตรงกับคำว่าอะไร?", options: ["ก. OR (หรือ)", "ข. AND (และ)", "ค. NOT (ไม่)", "ง. NAND"], answer: "ข" },
+      { id: 59, title: "สัญลักษณ์ตรรกศาสตร์ || ในเงื่อนไข if (A || B) มีความหมายตรงกับคำว่าอะไร?", options: ["ก. OR (หรือ)", "ข. AND (และ)", "ค. NOT (ไม่)", "ง. XOR"], answer: "ก" },
+      { id: 60, title: "ข้อใดคือประโยชน์ของการนำจอ LCD (เช่น LCD 16x2 I2C) มาใช้ร่วมกับ Arduino?", options: ["ก. เพิ่มความเร็วคอมไพล์", "ข. แสดงผลข้อความ/ตัวเลขค่าเซนเซอร์ออกทางหน้าจออุปกรณ์โดยไม่ต้องต่อคอมพิวเตอร์", "ค. ขยายพินอินพุตให้บอร์ด", "ง. ป้องกันไฟกระชากเข้าไมโครคอนโทรลเลอร์"], answer: "ข" }
+    ];
+
+    const TOTAL_TIME_MINUTES = 60;
+    const MAX_WARNINGS = 3;
+    
+    let timeRemaining = TOTAL_TIME_MINUTES * 60;
+    let warningCount = 0;
+    let timerInterval = null;
+    let studentData = {};
+    let adminModalObj = null;
+
+    document.addEventListener("DOMContentLoaded", function() {
+      adminModalObj = new bootstrap.Modal(document.getElementById('adminModal'));
+    });
+
+    function shuffleArray(array) {
+      let shuffled = [...array];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    }
+
+    // ----------------------------------------------------
+    // ระบบป้องกันการทุจริต
+    // ----------------------------------------------------
+    document.addEventListener("visibilitychange", function() {
+      if (!document.getElementById("quiz-section").classList.contains("d-none") && 
+          document.getElementById("result-card").classList.contains("d-none")) {
         
-        const redirectInterval = setInterval(() => {
-          redirectSec--;
-          if (redirectElement) redirectElement.innerText = redirectSec;
-          if (redirectSec <= 0) {
-            clearInterval(redirectInterval);
-            location.reload(); // รีเฟรชกลับหน้าแรกเพื่อให้นักเรียนคนต่อไปใช้งาน
+        if (document.hidden) {
+          warningCount++;
+          document.getElementById("warning-count").textContent = warningCount;
+          
+          if (warningCount >= MAX_WARNINGS) {
+            alert("คุณสลับหน้าจอเกินกำหนด (3 ครั้ง) ระบบจะทำการส่งข้อสอบทันที!");
+            submitQuiz(true);
+          } else {
+            alert(`คำเตือนครั้งที่ ${warningCount}: ห้ามสลับหน้าจอระหว่างการทำข้อสอบ!`);
           }
-        }, 1000);
+        }
       }
     });
-  }
 
-  // ================= 7. ADMIN LOGIN & ฟังก์ชันลบข้อมูล =================
-  function handleAdminLogin() {
-    const user = document.getElementById('adminUser').value.trim();
-    const pass = document.getElementById('adminPass').value.trim();
+    // ----------------------------------------------------
+    // ระบบ Quiz และบันทึกเข้า Firebase
+    // ----------------------------------------------------
+    document.getElementById("student-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      
+      studentData.name = document.getElementById("student-name").value.trim();
+      studentData.className = document.getElementById("student-class").value.trim();
+      studentData.id = document.getElementById("student-id").value.trim();
+      studentData.school = document.getElementById("student-school").value.trim();
+      
+      document.getElementById("start-card").classList.add("d-none");
+      document.getElementById("quiz-section").classList.remove("d-none");
+      
+      startTimer();
+      renderQuestions();
+    });
 
-    if (user === "admin1234" && pass === "23160") {
-      const modalElement = document.getElementById('adminLoginModal');
-      const modal = bootstrap.Modal.getInstance(modalElement);
-      if (modal) modal.hide();
-
-      document.getElementById('section-register').classList.add('hidden');
-      document.getElementById('section-admin').classList.remove('hidden');
-      loadAdminData();
-    } else {
-      alert("Username หรือ Password ไม่ถูกต้อง!");
+    function startTimer() {
+      timerInterval = setInterval(() => {
+        timeRemaining--;
+        const minutes = Math.floor(timeRemaining / 60);
+        const seconds = timeRemaining % 60;
+        
+        document.getElementById("timer-display").textContent = 
+          `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        if (timeRemaining <= 0) {
+          clearInterval(timerInterval);
+          alert("หมดเวลาทำข้อสอบ! ระบบกำลังบันทึกคำตอบของคุณ");
+          submitQuiz(true);
+        }
+      }, 1000);
     }
-  }
 
-  function loadAdminData() {
-    db.ref('exam_results').on('value', (snapshot) => {
-      const tbody = document.getElementById('adminTableBody');
-      tbody.innerHTML = '';
+    function renderQuestions() {
+      const container = document.getElementById("questions-container");
+      let htmlContent = "";
+      const randomizedQuestions = shuffleArray(questionsData);
+      const choicePrefixes = ["ก", "ข", "ค", "ง"];
 
-      if (snapshot.exists()) {
-        snapshot.forEach((child) => {
-          const key = child.key;
-          const data = child.val();
+      randomizedQuestions.forEach((q, index) => {
+        htmlContent += `
+          <div class="card mb-3 shadow-sm">
+            <div class="card-body">
+              <h5 class="card-title text-dark mb-3">ข้อที่ ${index + 1}. ${q.title}</h5>
+              ${q.options.map((opt, optIdx) => `
+                <div class="form-check my-2">
+                  <input class="form-check-input" type="radio" name="q${q.id}" id="q${q.id}_${optIdx}" value="${choicePrefixes[optIdx]}">
+                  <label class="form-check-label" for="q${q.id}_${optIdx}">
+                    ${opt}
+                  </label>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      });
 
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${data.timestamp || '-'}</td>
-            <td>${data.fullname || '-'}</td>
-            <td>${data.class || '-'}</td>
-            <td>${data.no || '-'}</td>
-            <td>${data.school || '-'}</td>
-            <td>${data.correctCount || 0} / 60</td>
-            <td><strong>${data.totalScore || 0}</strong></td>
-            <td><span class="badge ${data.switchTabCount > 0 ? 'bg-danger' : 'bg-secondary'}">${data.switchTabCount || 0}</span></td>
-            <td class="text-center">
-              <button class="btn btn-sm btn-outline-danger" onclick="deleteStudent('${key}')">ลบ</button>
-            </td>
-          `;
-          tbody.appendChild(tr);
+      container.innerHTML = htmlContent;
+    }
+
+    document.getElementById("btn-submit-quiz").addEventListener("click", function() {
+      if (confirm("คุณแน่ใจหรือไม่ว่าต้องการส่งข้อสอบ?")) {
+        submitQuiz(false);
+      }
+    });
+
+    function submitQuiz(isForced = false) {
+      clearInterval(timerInterval);
+      
+      const formData = new FormData(document.getElementById("quiz-form"));
+      let correctCount = 0;
+      
+      questionsData.forEach(q => {
+        const userAnswer = formData.get(`q${q.id}`);
+        if (userAnswer === q.answer) {
+          correctCount++;
+        }
+      });
+
+      const totalScore = correctCount * 0.5;
+
+      const payload = {
+        name: studentData.name,
+        className: studentData.className,
+        no: studentData.id,
+        school: studentData.school,
+        correctCount: correctCount,
+        score: totalScore,
+        warningsCount: warningCount,
+        submittedAt: new Date().toLocaleString('th-TH'),
+        isForcedSubmit: isForced
+      };
+
+      // บันทึกลง Firebase Realtime Database
+      database.ref("quiz_results").push(payload)
+        .then(() => {
+          document.getElementById("quiz-section").classList.add("d-none");
+          document.getElementById("result-card").classList.remove("d-none");
+
+          // นับถอยหลัง 5 วินาที แล้วรีโหลดกลับหน้าแรกให้อัตโนมัติ
+          let redirectSec = 5;
+          const counterEl = document.getElementById("redirect-counter");
+          const redirectInterval = setInterval(() => {
+            redirectSec--;
+            if (counterEl) counterEl.textContent = redirectSec;
+            if (redirectSec <= 0) {
+              clearInterval(redirectInterval);
+              location.reload();
+            }
+          }, 1000);
+        })
+        .catch(err => {
+          alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล: " + err.message);
         });
+    }
+
+    // ----------------------------------------------------
+    // ระบบ Admin และอ่านข้อมูล/ลบข้อมูลจาก Firebase
+    // ----------------------------------------------------
+    function showAdminModal() {
+      adminModalObj.show();
+    }
+
+    document.getElementById("admin-login-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const user = document.getElementById("admin-user").value.trim();
+      const pass = document.getElementById("admin-pass").value.trim();
+
+      if (user === ADMIN_USER && pass === ADMIN_PASS) {
+        adminModalObj.hide();
+        document.getElementById("start-card").classList.add("d-none");
+        document.getElementById("admin-section").classList.remove("d-none");
+        loadAdminTableData();
       } else {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">ยังไม่มีข้อมูลการส่งข้อสอบ</td></tr>';
+        alert("Username หรือ Password ไม่ถูกต้อง!");
       }
     });
-  }
 
-  function deleteStudent(key) {
-    if (confirm("คุณต้องการลบข้อมูลรายชื่อนี้ออกจากระบบใช่หรือไม่?")) {
-      db.ref('exam_results/' + key).remove()
-        .then(() => alert("ลบข้อมูลเรียบร้อยแล้ว"))
-        .catch(err => alert("เกิดข้อผิดพลาดในการลบ: " + err.message));
+    function logoutAdmin() {
+      document.getElementById("admin-section").classList.add("d-none");
+      document.getElementById("start-card").classList.remove("d-none");
     }
-  }
 
-  function exportToExcel() {
-    const table = document.getElementById("adminTable");
-    const cloneTable = table.cloneNode(true);
-    for (let row of cloneTable.rows) {
-      row.deleteCell(-1);
+    function loadAdminTableData() {
+      const tbody = document.getElementById("admin-table-body");
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4">กำลังโหลดข้อมูลจาก Firebase...</td></tr>`;
+
+      database.ref("quiz_results").on("value", (snapshot) => {
+        tbody.innerHTML = "";
+        const data = snapshot.val();
+
+        if (!data) {
+          tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">ยังไม่มีข้อมูลนักเรียนทำข้อสอบ</td></tr>`;
+          return;
+        }
+
+        Object.keys(data).forEach((key) => {
+          const item = data[key];
+          tbody.innerHTML += `
+            <tr>
+              <td>${item.submittedAt || '-'}</td>
+              <td>${item.name || '-'}</td>
+              <td>${item.className || '-'}</td>
+              <td>${item.no || '-'}</td>
+              <td>${item.school || '-'}</td>
+              <td class="fw-bold text-success">${item.correctCount || 0} / 60</td>
+              <td class="fw-bold text-primary fs-5">${item.score || 0}</td>
+              <td><span class="badge ${item.warningsCount > 0 ? 'bg-danger' : 'bg-success'}">${item.warningsCount || 0}</span></td>
+              <td>
+                <button class="btn btn-danger btn-sm px-3" onclick="deleteStudentResult('${key}', '${item.name}')">
+                  ✕ ลบ
+                </button>
+              </td>
+            </tr>
+          `;
+        });
+      }, (error) => {
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger py-4">เกิดข้อผิดพลาดในการดึงข้อมูล: ${error.message} (โปรดเช็ก Firebase Rules)</td></tr>`;
+      });
     }
-    const wb = XLSX.utils.table_to_book(cloneTable, {sheet: "ผลการสอบ"});
-    XLSX.writeFile(wb, "สรุปผลการสอบ_Arduino.xlsx");
-  }
-</script>
 
+    // ฟังก์ชันลบข้อมูลรายชื่อนักเรียนออกจาก Firebase
+    function deleteStudentResult(key, name) {
+      if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลผลการสอบของ "${name}" ออกจากระบบ?`)) {
+        database.ref("quiz_results/" + key).remove()
+          .then(() => {
+            alert("ลบข้อมูลเรียบร้อยแล้ว");
+          })
+          .catch((err) => {
+            alert("เกิดข้อผิดพลาดในการลบข้อมูล: " + err.message);
+          });
+      }
+    }
+
+    function exportToExcel() {
+      database.ref("quiz_results").once("value", (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          alert("ไม่มีข้อมูลที่จะดาวน์โหลด");
+          return;
+        }
+
+        const excelData = [];
+        Object.keys(data).forEach((key) => {
+          const item = data[key];
+          excelData.push({
+            "เวลาที่ส่ง": item.submittedAt,
+            "ชื่อ-นามสกุล": item.name,
+            "ชั้น": item.className,
+            "เลขที่": item.no,
+            "โรงเรียน": item.school,
+            "ตอบถูก (ข้อ)": `${item.correctCount} / 60`,
+            "คะแนนรวม (30 คะแนน)": item.score,
+            "จำนวนสลับหน้าจอ (ครั้ง)": item.warningsCount,
+            "ส่งแบบบังคับ (หมดเวลา/ผิดกฎ)": item.isForcedSubmit ? "ใช่" : "ไม่ใช่"
+          });
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(excelData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "คะแนนสอบ");
+
+        XLSX.writeFile(workbook, "รายงานสรุปคะแนนสอบ_Arduino.xlsx");
+      });
+    }
+  </script>
 </body>
 </html>
